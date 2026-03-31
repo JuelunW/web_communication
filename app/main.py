@@ -23,6 +23,12 @@ app.add_middleware(
 
 my_name = "Jay"
 
+my_rooms = [
+    {"id": 1, "name": "Room A", "price": 110,},
+    {"id": 2, "name": "Room B", "price": 120,},
+    {"id": 3, "name": "Room C", "price": 130,},
+]
+
 # get request for main route
 @app.get("/")
 def read_root():
@@ -56,3 +62,8 @@ def generate_html_response(ip):
 async def html_ip(request: Request):
     ip = request.client.host
     return generate_html_response(ip)
+
+
+@app.get("/rooms")
+def read():
+    return { "rooms": my_rooms}

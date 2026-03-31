@@ -1,0 +1,6 @@
+
+@apiUrl = https://web-communication-git-web-communitation.2.rahtiapp.fi
+GET {{apiUrl}}/api/ip
+
+###
+GET {{apiUrl}}
