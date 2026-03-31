@@ -1,7 +1,25 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
+
+origins = [
+    "*", # Allow all origins
+
+    "https://web-communication-git-web-communitation.2.rahtiapp.fi",
+    "http://localhost",
+
+    "http://127.0.0.1:5500",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 my_name = "Jay"
 
@@ -10,14 +28,15 @@ my_name = "Jay"
 def read_root():
     return { "msg": "Hello! " + my_name, "next_msg": f"Hi, {my_name}"}
 
+
 @app.get("/items/{id}")
 def read_item(item_id: int, q: str = None):
     return {"id": id, "q": q}
 
 @app.get("/api/ip")
-def read_root(request: Request):
+def api_ip(request: Request):
     client_host = request.client.host
-    return { "msg": f"Your public IP is {client_host}"}
+    return { "ip": client_host}
 
 def generate_html_response(ip):
     
@@ -34,6 +53,6 @@ def generate_html_response(ip):
     return HTMLResponse(content=html_content, status_code=200)
 
 @app.get("/ip", response_class=HTMLResponse)
-async def read_root(request: Request):
+async def html_ip(request: Request):
     ip = request.client.host
     return generate_html_response(ip)
