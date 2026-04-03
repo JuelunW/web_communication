@@ -1,6 +1,0 @@
-
-@apiUrl = https://web-communication-git-web-communitation.2.rahtiapp.fi/rooms
-GET {{apiUrl}}
-
-###
-GET {{apiUrl}}

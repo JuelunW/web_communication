@@ -1,0 +1,17 @@
+@apiUrl = http://0.0.0.0:8080
+#@apiUrl = https://web-communication-git-web-communitation.2.rahtiapp.fi/rooms
+GET {{apiUrl}}
+
+###
+GET {{apiUrl}}/rooms
+
+###
+POST {{apiUrl}}/bookings
+Content-Type: application/json
+
+{
+    "room_id": 1,
+    "name": "John Doe",
+    "start_date": "2026-04-01",
+    "end_date": "2026-04-03"
+}

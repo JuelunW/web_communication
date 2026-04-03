@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from app.db import *
 
 app = FastAPI()
 
@@ -32,7 +34,11 @@ my_rooms = [
 # get request for main route
 @app.get("/")
 def read_root():
-    return { "msg": "Hello! " + my_name, "next_msg": f"Hi, {my_name}"}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT 'Hello, postgres!' AS message")
+        result = cur.fetchone()
+        create_schema()
+    return { "msg": f"Hotel API", "db_api": result}
 
 
 @app.get("/items/{id}")
@@ -45,7 +51,7 @@ def api_ip(request: Request):
     return { "ip": client_host}
 
 def generate_html_response(ip):
-    
+
     html_content = f"""
     <html>
         <head>
@@ -67,3 +73,15 @@ async def html_ip(request: Request):
 @app.get("/rooms")
 def read():
     return { "rooms": my_rooms}
+
+# Create a class to represent your JSON body
+class Booking(BaseModel):
+    room_id: int
+    name: str
+    start_date: str
+    end_date: str
+
+@app.post("/bookings")
+def create_booking(booking: Booking):
+    # Access data using booking.room_id or booking.name
+    return {"message": f"Booking created for {booking.name} in room {booking.room_id}"}
