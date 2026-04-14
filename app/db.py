@@ -27,8 +27,8 @@ def create_schema():
 
             CREATE TABLE IF NOT EXISTS hotel_bookings (
                 id SERIAL PRIMARY KEY,
-                guest_id INT,
-                FOREIGN KEY (guest_id) REFERENCES hotel_guests(id),
+                guest_id INT REFERENCES hotel_guests(id),
+                -- same results as above
                 room_id INT,
                 FOREIGN KEY (room_id) REFERENCES hotel_rooms(id),
                 datefrom DATE NOT NULL,
