@@ -69,7 +69,13 @@ async def html_ip(request: Request):
 ### Hotel
 @app.get("/rooms")
 def read():
-    return { "rooms": my_rooms}
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT *
+            FROM hotel_rooms
+        """)
+        room = cur.fetchall()
+    return {"rooms": room}
 
 @app.get("/rooms/{id}")
 def get_one_room(id: int):
@@ -90,7 +96,10 @@ def get_bookings():
                 g.firstname,
                 b.room_id,
                 r.room_number,
-                b.datefrom
+                b.datefrom,
+                (b.dateto - b.datefrom) AS stays,
+                (r.price * (b.dateto - b.datefrom)) AS total_price,
+                b.addinfo
             FROM hotel_guests AS g
             INNER JOIN hotel_bookings AS b
                 ON g.id = b.guest_id
@@ -113,12 +122,42 @@ class Booking(BaseModel):
 def create_booking(booking: Booking):
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("""
-                    INSERT INTO hotel_bookings (room_id, guest_id, datefrom, dateto)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO hotel_bookings (room_id, guest_id, datefrom, dateto, addinfo)
+                    VALUES (%s, %s, %s, %s, %s)
                     RETURNING id
-                    """, [booking.room_id, booking.guest_id, booking.datefrom, booking.dateto])
+                    """, [booking.room_id, booking.guest_id, booking.datefrom, booking.dateto, booking.addinfo])
         booking_id = cur.fetchone()
     return {"message": "Booking created!", "booking_id": booking_id}
+
+@app.get("/guests")
+def get_guests():
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT
+                g.id,
+                g.firstname,
+	            g.lastname,
+	            (SELECT count(*)
+                    FROM hotel_bookings
+                    WHERE guest_id = g.id AND dateto < CURRENT_DATE
+                ) AS previous_visits
+            FROM hotel_guests AS g
+        """)
+        guests = cur.fetchall()
+    return {"guests": guests}
+
+@app.get("/guests/{id}")
+def get_guests_id(id: int):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT count(*)
+            FROM hotel_bookings
+            WHERE guest_id = %s AND dateto < CURRENT_DATE
+        """, (id,))
+        guest = cur.fetchone()
+    return guest
+
+
 
 ### Other
 @app.get("/items/{id}")

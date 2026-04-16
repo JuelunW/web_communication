@@ -21,3 +21,9 @@ Content-Type: application/json
     "datefrom": "2026-05-01",
     "dateto": "2026-05-03"
 }
+
+###
+GET {{apiUrl}}/guests
+
+###
+GET {{apiUrl}}/guests/1

@@ -31,7 +31,7 @@ def create_schema():
                 -- same results as above
                 room_id INT,
                 FOREIGN KEY (room_id) REFERENCES hotel_rooms(id),
-                datefrom DATE NOT NULL,
+                datefrom DATE DEFAULT CURRENT_DATE,
                 dateto DATE DEFAULT (CURRENT_DATE + INTERVAL '1 day'),
                 addinfo VARCHAR,
                 created_at TIMESTAMP DEFAULT now()
