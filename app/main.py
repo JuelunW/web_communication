@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import date
@@ -31,6 +32,24 @@ my_rooms = [
     {"id": 2, "name": "Room B", "price": 120,},
     {"id": 3, "name": "Room C", "price": 130,},
 ]
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def validate_key(api_key: str = Depends(api_key_header)):
+    if not api_key:
+        raise HTTPException(status_code=401, detail={"error": "API key is missing"})
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT *
+            FROM hotel_guests
+            WHERE api_key = %s
+        """, (api_key,))
+        guest = cur.fetchone()
+        if not guest:
+            raise HTTPException(status_code=401, detail={"error": "Invalid API key"})
+    return guest
+
+
 
 ### IP
 # get request for main route
@@ -89,7 +108,7 @@ def get_one_room(id: int):
     return room
 
 @app.get("/bookings")
-def get_bookings():
+def get_bookings(guest: dict = Depends(validate_key)):
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("""
             SELECT
@@ -98,17 +117,24 @@ def get_bookings():
                 r.room_number,
                 b.datefrom,
                 (b.dateto - b.datefrom) AS stays,
-                (r.price * (b.dateto - b.datefrom)) AS total_price,
-                b.addinfo
+                (r.price * (b.dateto - b.datefrom)) AS gross_price,
+                CASE
+    		        WHEN dateto - datefrom >= 7 THEN (r.price * (b.dateto - b.datefrom) * 0.8)
+    		        ELSE (r.price * (b.dateto - b.datefrom))
+    	        END AS total_price,
+                b.addinfo,
+                b.stars,
+                b.id
             FROM hotel_guests AS g
             INNER JOIN hotel_bookings AS b
                 ON g.id = b.guest_id
             INNER JOIN hotel_rooms AS r
                 ON r.id = b.room_id
+            WHERE g.id = %s
             ORDER BY b.datefrom
-        """)
-        room = cur.fetchall()
-    return room
+        """, (guest['id'],))
+        bookings = cur.fetchall()
+    return bookings
 
 # Create a class to represent your JSON body
 class Booking(BaseModel):
@@ -128,6 +154,21 @@ def create_booking(booking: Booking):
                     """, [booking.room_id, booking.guest_id, booking.datefrom, booking.dateto, booking.addinfo])
         booking_id = cur.fetchone()
     return {"message": "Booking created!", "booking_id": booking_id}
+
+class Stars(BaseModel):
+    stars: int
+
+@app.put("/bookings/{id}")
+def put_bookings(id: int, stars: Stars):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            UPDATE hotel_bookings
+            SET stars = %s
+            WHERE id = %s
+            RETURNING id
+        """, (stars.stars, id,))
+        bookings = cur.fetchall()
+    return bookings
 
 @app.get("/guests")
 def get_guests():
@@ -156,6 +197,8 @@ def get_guests_id(id: int):
         """, (id,))
         guest = cur.fetchone()
     return guest
+
+
 
 
 

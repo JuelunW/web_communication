@@ -9,6 +9,9 @@ def create_schema():
     with get_conn() as conn, conn.cursor() as cur:
         # Create the schema
         cur.execute("""
+            -- add pgcrypto extension for generating random uuids
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
             CREATE TABLE IF NOT EXISTS hotel_rooms (
                 id SERIAL PRIMARY KEY,
                 room_number INT NOT NULL,
@@ -24,6 +27,10 @@ def create_schema():
                 address VARCHAR,
                 created_at TIMESTAMP DEFAULT now()
             );
+            ALTER TABLE hotel_guests ADD COLUMN IF NOT EXISTS api_key UUID DEFAULT gen_random_uuid();
+            -- encode(gen_random_bytes(32), 'hex');
+            UPDATE hotel_guests SET api_key = gen_random_uuid() WHERE api_key IS NULL;
+
 
             CREATE TABLE IF NOT EXISTS hotel_bookings (
                 id SERIAL PRIMARY KEY,
