@@ -16,7 +16,7 @@ def create_schema():
                 id SERIAL PRIMARY KEY,
                 room_number INT NOT NULL,
                 type VARCHAR DEFAULT 'standard',
-                price NUMRIC NOT NULL,
+                price INT NOT NULL,
                 created_at TIMESTAMP DEFAULT now()
             );
 
@@ -41,7 +41,8 @@ def create_schema():
                 datefrom DATE DEFAULT CURRENT_DATE,
                 dateto DATE DEFAULT (CURRENT_DATE + INTERVAL '1 day'),
                 addinfo VARCHAR,
-                created_at TIMESTAMP DEFAULT now()
+                created_at TIMESTAMP DEFAULT now(),
+                stars INT
             );
 
             -- add columns
