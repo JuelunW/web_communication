@@ -33,6 +33,8 @@ my_rooms = [
     {"id": 3, "name": "Room C", "price": 130,},
 ]
 
+create_schema()
+
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def validate_key(api_key: str = Depends(api_key_header)):
@@ -58,7 +60,7 @@ def read_root():
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("SELECT 'Hello, postgres!' AS message")
         result = cur.fetchone()
-        create_schema()
+        #create_schema()
     return { "msg": f"Hotel API", "db_api": result}
 
 @app.get("/api/ip")
@@ -111,27 +113,10 @@ def get_one_room(id: int):
 def get_bookings(guest: dict = Depends(validate_key)):
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute("""
-            SELECT
-                g.firstname,
-                b.room_id,
-                r.room_number,
-                b.datefrom,
-                (b.dateto - b.datefrom) AS stays,
-                (r.price * (b.dateto - b.datefrom)) AS gross_price,
-                CASE
-    		        WHEN dateto - datefrom >= 7 THEN (r.price * (b.dateto - b.datefrom) * 0.8)
-    		        ELSE (r.price * (b.dateto - b.datefrom))
-    	        END AS total_price,
-                b.addinfo,
-                b.stars,
-                b.id
-            FROM hotel_guests AS g
-            INNER JOIN hotel_bookings AS b
-                ON g.id = b.guest_id
-            INNER JOIN hotel_rooms AS r
-                ON r.id = b.room_id
-            WHERE g.id = %s
-            ORDER BY b.datefrom
+            SELECT *
+            FROM bookings_view
+            WHERE guest_id = %s
+            ORDER BY datefrom
         """, (guest['id'],))
         bookings = cur.fetchall()
     return bookings

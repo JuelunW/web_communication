@@ -44,8 +44,29 @@ def create_schema():
                 created_at TIMESTAMP DEFAULT now()
             );
 
-
-
             -- add columns
             -- ALTER TABLE rooms ADD COLUMN IF NOT EXISTS room_type VARCHAR;
+
+            -- create a view
+            CREATE OR REPLACE VIEW bookings_view AS
+                SELECT
+                    g.firstname,
+                    b.room_id,
+                    r.room_number,
+                    b.datefrom,
+                    (b.dateto - b.datefrom) AS stays,
+                    (r.price * (b.dateto - b.datefrom)) AS gross_price,
+                    CASE
+                        WHEN dateto - datefrom >= 7 THEN (r.price * (b.dateto - b.datefrom) * 0.8)
+                        ELSE (r.price * (b.dateto - b.datefrom))
+                    END AS total_price,
+                    b.addinfo,
+                    b.stars,
+                    b.id,
+                    g.id AS guest_id
+                FROM hotel_guests AS g
+                INNER JOIN hotel_bookings AS b
+                    ON g.id = b.guest_id
+                INNER JOIN hotel_rooms AS r
+                    ON r.id = b.room_id
         """)
