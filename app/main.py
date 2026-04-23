@@ -159,14 +159,21 @@ class Stars(BaseModel):
     stars: int
 
 @app.put("/bookings/{id}")
-def put_bookings(id: int, stars: Stars):
+def put_bookings(id: int, stars: Stars, guest: dict = Depends(validate_key)):
     with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT *
+            FROM hotel_bookings
+            WHERE id = %s AND guest_id = %s
+        """, (id, guest['id'],))
+        if not cur.fetchall(): return {"error": "Booking not found or you don't have permission to update this booking."}
+
         cur.execute("""
             UPDATE hotel_bookings
             SET stars = %s
-            WHERE id = %s
+            WHERE id = %s AND guest_id = %s
             RETURNING id
-        """, (stars.stars, id,))
+        """, (stars.stars, id, guest['id'],))
         bookings = cur.fetchall()
     return bookings
 
