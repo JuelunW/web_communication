@@ -1,0 +1,23 @@
+@baseUrl = {{$dotenv API_URL}}
+
+### Create a room
+POST {{baseUrl}}/rooms
+Content-Type: application/json
+
+{
+  "room_number": 101,
+  "room_type": "single",
+  "price": 89
+}
+
+
+### Get all rooms
+GET {{baseUrl}}/rooms
+
+
+### Get one room
+GET {{baseUrl}}/rooms/1
+
+
+### Delete a room
+DELETE {{baseUrl}}/rooms/1

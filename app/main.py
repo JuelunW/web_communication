@@ -1,209 +1,80 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
-from fastapi.responses import HTMLResponse
-from fastapi.security import APIKeyHeader
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
-from datetime import date
-from app.db import *
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.db import get_db, init_db, Room
 
 app = FastAPI()
 
-origins = [
-    "*", # Allow all origins
+@app.on_event("startup")
+def startup():
+    init_db()
 
-    "https://web-communication-git-web-communitation.2.rahtiapp.fi",
-    "http://localhost",
-
-    "http://127.0.0.1:5500",
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-my_name = "Jay"
-
-my_rooms = [
-    {"id": 1, "name": "Room A", "price": 110,},
-    {"id": 2, "name": "Room B", "price": 120,},
-    {"id": 3, "name": "Room C", "price": 130,},
-]
-
-create_schema()
-
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-def validate_key(api_key: str = Depends(api_key_header)):
-    if not api_key:
-        raise HTTPException(status_code=401, detail={"error": "API key is missing"})
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT *
-            FROM hotel_guests
-            WHERE api_key = %s
-        """, (api_key,))
-        guest = cur.fetchone()
-        if not guest:
-            raise HTTPException(status_code=401, detail={"error": "Invalid API key"})
-    return guest
+# Pydantic schema for POST
+class RoomCreate(BaseModel):
+    room_number: int
+    room_type: str
+    price: float
 
 
-
-### IP
-# get request for main route
 @app.get("/")
-def read_root():
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT 'Hello, postgres!' AS message")
-        result = cur.fetchone()
-        #create_schema()
-    return { "msg": f"Hotel API", "db_api": result}
+def default_endpoint(db: Session = Depends(get_db)):
+    result = db.execute(text("SELECT version()"))
+    return { "version": result.scalar(), "endpoints": "rooms/" }
 
-@app.get("/api/ip")
-def api_ip(request: Request):
-    client_host = request.client.host
-    return { "ip": client_host}
 
-def generate_html_response(ip):
+@app.post("/rooms")
+def create_room(payload: RoomCreate, db: Session = Depends(get_db)):
+    # We need to map the incoming data object (pydantic RoomCreate) with the SQLAlchemy Data model
+    room = Room(
+        room_number=payload.room_number,
+        room_type=payload.room_type,
+        price=payload.price
+    )
+    # If we have the same field names, we could also just do:
+    #room = Room(**payload.model_dump())
 
-    html_content = f"""
-    <html>
-        <head>
-            <title>Some HTML in here</title>
-        </head>
-        <body>
-            <h1>Your public IP is {ip}</h1>
-        </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content, status_code=200)
+    # Prepare object for insert
+    db.add(room)
 
-@app.get("/ip", response_class=HTMLResponse)
-async def html_ip(request: Request):
-    ip = request.client.host
-    return generate_html_response(ip)
+    # Actually execute SQL INSERT
+    db.commit()
 
-### Hotel
-@app.get("/rooms")
-def read():
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT *
-            FROM hotel_rooms
-        """)
-        room = cur.fetchall()
-    return {"rooms": room}
-
-@app.get("/rooms/{id}")
-def get_one_room(id: int):
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT *
-            FROM hotel_rooms
-            WHERE id = %s
-        """, (id,)) # <- tuple, list is also fine: [id]
-        room = cur.fetchone()
+    # If you need the updated data (like for returning), you need to refresh
+    db.refresh(room)
     return room
 
-@app.get("/bookings")
-def get_bookings(guest: dict = Depends(validate_key)):
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT *
-            FROM bookings_view
-            WHERE guest_id = %s
-            ORDER BY datefrom
-        """, (guest['id'],))
-        bookings = cur.fetchall()
-    return bookings
 
-# Create a class to represent your JSON body
-class Booking(BaseModel):
-    room_id: int
-    guest_id: int
-    datefrom: date
-    dateto: date
-    addinfo: str | None = None
-
-@app.post("/bookings")
-def create_booking(booking: Booking):
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-                    INSERT INTO hotel_bookings (room_id, guest_id, datefrom, dateto, addinfo)
-                    VALUES (%s, %s, %s, %s, %s)
-                    RETURNING id
-                    """, [booking.room_id, booking.guest_id, booking.datefrom, booking.dateto, booking.addinfo])
-        booking_id = cur.fetchone()
-    return {"message": "Booking created!", "booking_id": booking_id}
-
-class Stars(BaseModel):
-    stars: int
-
-@app.put("/bookings/{id}")
-def put_bookings(id: int, stars: Stars, guest: dict = Depends(validate_key)):
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT *
-            FROM hotel_bookings
-            WHERE id = %s AND guest_id = %s
-        """, (id, guest['id'],))
-        if not cur.fetchall(): return {"error": f"Booking {id} not found or you {guest['id']} don't have permission to update this booking."}
-
-        cur.execute("""
-            UPDATE hotel_bookings
-            SET stars = %s
-            WHERE id = %s AND guest_id = %s
-            RETURNING id
-        """, (stars.stars, id, guest['id'],))
-        bookings = cur.fetchall()
-    return bookings
-
-@app.get("/guests")
-def get_guests():
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT
-                g.id,
-                g.firstname,
-	            g.lastname,
-	            (SELECT count(*)
-                    FROM hotel_bookings
-                    WHERE guest_id = g.id AND dateto < CURRENT_DATE
-                ) AS previous_visits
-            FROM hotel_guests AS g
-        """)
-        guests = cur.fetchall()
-    return {"guests": guests}
-
-@app.get("/guests/{id}")
-def get_guests_id(id: int):
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("""
-            SELECT count(*)
-            FROM hotel_bookings
-            WHERE guest_id = %s AND dateto < CURRENT_DATE
-        """, (id,))
-        guest = cur.fetchone()
-    return guest
+@app.get("/rooms")
+def get_rooms(db: Session = Depends(get_db)):
+    # ORM equivalent of:
+    #   SELECT * FROM rooms ORDER BY id DESC
+    return db.query(Room).order_by(Room.id.desc()).all()
 
 
+@app.get("/rooms/{id}")
+def get_room(id: int, db: Session = Depends(get_db)):
+    # ORM equivalent of:
+    #   SELECT * FROM rooms WHERE id = %s
+    room = db.query(Room).filter(Room.id == id).first()
+
+    if not room:
+        raise HTTPException(404, "Room not found")
+
+    return room
 
 
+@app.delete("/rooms/{id}")
+def delete_room(id: int, db: Session = Depends(get_db)):
+    # ORM loads the object first
+    room = db.query(Room).filter(Room.id == id).first()
 
-### Other
-@app.get("/items/{id}")
-def read_item(id: int, q: str = ''):
-    return {"id": id, "q": q}
+    if not room:
+        raise HTTPException(404, "Room not found")
 
-@app.get("/if/{term}")
-def if_term(term: str):
-    if term == "hello" or term == "hi" or term == "hey":
-        return {"message": "Hello there!"}
-    elif term == "goodbye":
-        return {"message": "Goodbye!"}
-    else:
-        return {"message": f"Term '{term}' not recognized."}
+    # ORM tracks deletion instead of raw DELETE SQL
+    db.delete(room)
+    db.commit()
+
+    return {"deleted": id}

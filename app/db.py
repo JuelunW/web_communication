@@ -1,73 +1,95 @@
-import os, psycopg
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Date, Numeric, TIMESTAMP, ForeignKey, func, text
+from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# ---------------------------------------------------
+# DATABASE SETUP
+# ---------------------------------------------------
+# SQLAlchemy uses an "engine" instead of manual psycopg connections.
+# The engine manages connection pooling automatically.
+DATABASE_URL = os.getenv("DATABASE_URL").replace(
+    "postgresql://", "postgresql+psycopg://"
+)
 
-def get_conn():
-    return psycopg.connect(DATABASE_URL, autocommit=True, row_factory=psycopg.rows.dict_row)
+engine = create_engine(DATABASE_URL, future=True)
 
-def create_schema():
-    with get_conn() as conn, conn.cursor() as cur:
-        # Create the schema
-        cur.execute("""
-            -- add pgcrypto extension for generating random uuids
-            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+# Session = unit of work (similar to a psycopg connection + cursor combined,
+# but with ORM tracking of objects)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 
-            CREATE TABLE IF NOT EXISTS hotel_rooms (
-                id SERIAL PRIMARY KEY,
-                room_number INT NOT NULL,
-                type VARCHAR DEFAULT 'standard',
-                price INT NOT NULL,
-                created_at TIMESTAMP DEFAULT now()
-            );
-
-            CREATE TABLE IF NOT EXISTS hotel_guests (
-                id SERIAL PRIMARY KEY,
-                firstname VARCHAR NOT NULL,
-                lastname VARCHAR NOT NULL,
-                address VARCHAR,
-                created_at TIMESTAMP DEFAULT now()
-            );
-            ALTER TABLE hotel_guests ADD COLUMN IF NOT EXISTS api_key UUID DEFAULT gen_random_uuid();
-            -- encode(gen_random_bytes(32), 'hex');
-            UPDATE hotel_guests SET api_key = gen_random_uuid() WHERE api_key IS NULL;
+Base = declarative_base()
 
 
-            CREATE TABLE IF NOT EXISTS hotel_bookings (
-                id SERIAL PRIMARY KEY,
-                guest_id INT REFERENCES hotel_guests(id),
-                -- same results as above
-                room_id INT,
-                FOREIGN KEY (room_id) REFERENCES hotel_rooms(id),
-                datefrom DATE DEFAULT CURRENT_DATE,
-                dateto DATE DEFAULT (CURRENT_DATE + INTERVAL '1 day'),
-                addinfo VARCHAR,
-                created_at TIMESTAMP DEFAULT now(),
-                stars INT
-            );
+# ---------------------------------------------------
+# ORM MODEL: ROOMS
+# ---------------------------------------------------
+# This class represents a TABLE in the database.
+# Each attribute = column.
+class Room(Base):
+    __tablename__ = "rooms"
 
-            -- add columns
-            -- ALTER TABLE rooms ADD COLUMN IF NOT EXISTS room_type VARCHAR;
+    # PRIMARY KEY (like SERIAL PRIMARY KEY in raw SQL)
+    id = Column(Integer, primary_key=True)
 
-            -- create a view
-            CREATE OR REPLACE VIEW bookings_view AS
-                SELECT
-                    g.firstname,
-                    b.room_id,
-                    r.room_number,
-                    b.datefrom,
-                    (b.dateto - b.datefrom) AS stays,
-                    (r.price * (b.dateto - b.datefrom)) AS gross_price,
-                    CASE
-                        WHEN dateto - datefrom >= 7 THEN (r.price * (b.dateto - b.datefrom) * 0.8)
-                        ELSE (r.price * (b.dateto - b.datefrom))
-                    END AS total_price,
-                    b.addinfo,
-                    b.stars,
-                    b.id,
-                    b.guest_id
-                FROM hotel_guests AS g
-                INNER JOIN hotel_bookings AS b
-                    ON g.id = b.guest_id
-                INNER JOIN hotel_rooms AS r
-                    ON r.id = b.room_id
-        """)
+    # NOT NULL constraint
+    room_number = Column(Integer, nullable=False)
+
+    # VARCHAR column (string in Python maps to SQL VARCHAR/TEXT)
+    room_type = Column(String)
+
+    # NUMERIC column (good for money; avoids float precision issues)
+    price = Column(Numeric)
+
+    # server_default runs in PostgreSQL (not Python)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+# ---------------------------------------------------
+# ORM MODEL: GUESTS
+# ---------------------------------------------------
+class Guest(Base):
+    __tablename__ = "guests"
+
+    id = Column(Integer, primary_key=True)
+
+    firstname = Column(String, nullable=False)
+    lastname = Column(String, nullable=False)
+    address = Column(String)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+# ---------------------------------------------------
+# ORM MODEL: BOOKINGS
+# ---------------------------------------------------
+class Booking(Base):
+    __tablename__ = "bookings"
+
+    id = Column(Integer, primary_key=True)
+
+    # Foreign keys
+    guest_id = Column(Integer, ForeignKey("guests.id"))
+    room_id = Column(Integer, ForeignKey("rooms.id"))
+
+    # Start date of booking with default today
+    datefrom = Column(Date, nullable=False, server_default=func.current_date())
+
+    # End date of booking, SQLAlchemy doesn't have now()+1 so we need to use text() to pass raw SQL:
+    dateto = Column(Date, nullable=False, server_default=text("(now() + interval '1 day')::date)")
+
+    info = Column(String)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+# ---------------------------------------------------
+# Create SQLAlchemy session (similar to the previous db_conn() function)
+# ---------------------------------------------------
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+# ---------------------------------------------------
+# Create schema (run on app startup)
+# ---------------------------------------------------
+def init_db():
+    Base.metadata.create_all(bind=engine)
+  
