@@ -72,7 +72,7 @@ class Booking(Base):
     datefrom = Column(Date, nullable=False, server_default=func.current_date())
 
     # End date of booking, SQLAlchemy doesn't have now()+1 so we need to use text() to pass raw SQL:
-    dateto = Column(Date, nullable=False, server_default=text("(now() + interval '1 day')::date)")
+    dateto = Column(Date, nullable=False, server_default=text("(now() + interval '1 day')::date)"))
 
     info = Column(String)
     created_at = Column(TIMESTAMP, server_default=func.now())
