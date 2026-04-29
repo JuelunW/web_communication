@@ -24,7 +24,7 @@ Content-Type: application/json
 }
 
 ###
-PUT {{apiUrl}}/bookings/1
+PUT {{apiUrl}}/bookings/10
 Content-Type: application/json
 X-API-KEY: 3c9ced16-8cc9-4667-afc0-c1b55e710a6e
 

@@ -64,7 +64,7 @@ def create_schema():
                     b.addinfo,
                     b.stars,
                     b.id,
-                    g.id AS guest_id
+                    b.guest_id
                 FROM hotel_guests AS g
                 INNER JOIN hotel_bookings AS b
                     ON g.id = b.guest_id

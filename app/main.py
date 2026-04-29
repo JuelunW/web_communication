@@ -151,7 +151,7 @@ def put_bookings(id: int, stars: Stars, guest: dict = Depends(validate_key)):
             FROM hotel_bookings
             WHERE id = %s AND guest_id = %s
         """, (id, guest['id'],))
-        if not cur.fetchall(): return {"error": "Booking not found or you don't have permission to update this booking."}
+        if not cur.fetchall(): return {"error": f"Booking {id} not found or you {guest['id']} don't have permission to update this booking."}
 
         cur.execute("""
             UPDATE hotel_bookings
