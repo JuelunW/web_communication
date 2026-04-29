@@ -6,7 +6,6 @@ Content-Type: application/json
 
 {
   "room_number": 101,
-  "room_type": "single",
   "price": 89
 }
 

@@ -1,0 +1,39 @@
+@apiUrl = http://0.0.0.0:8080
+#@apiUrl = https://web-communication-git-web-communitation.2.rahtiapp.fi/rooms
+GET {{apiUrl}}
+
+###
+GET {{apiUrl}}/rooms
+
+###
+GET {{apiUrl}}/rooms/1
+
+###
+GET {{apiUrl}}/bookings
+X-API-KEY: 3c9ced16-8cc9-4667-afc0-c1b55e710a6e
+
+###
+POST {{apiUrl}}/bookings
+Content-Type: application/json
+
+{
+    "room_id": 1,
+    "guest_id": 1,
+    "datefrom": "2026-05-01",
+    "dateto": "2026-05-03"
+}
+
+###
+PUT {{apiUrl}}/bookings/10
+Content-Type: application/json
+X-API-KEY: 3c9ced16-8cc9-4667-afc0-c1b55e710a6e
+
+{
+    "stars": 2
+}
+
+###
+GET {{apiUrl}}/guests
+
+###
+GET {{apiUrl}}/guests/1

@@ -1,11 +1,33 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
+from datetime import date
 
-from app.db import get_db, init_db, Room
+from app.db import get_db, init_db, Room, Booking, Guest, BookingView
 
 app = FastAPI()
+
+origins = [
+    "*", # Allow all origins
+
+    "https://web-communication-git-web-communitation.2.rahtiapp.fi",
+    "http://localhost",
+
+    "http://127.0.0.1:5500",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+my_name = "Jay"
 
 @app.on_event("startup")
 def startup():
@@ -78,3 +100,129 @@ def delete_room(id: int, db: Session = Depends(get_db)):
     db.commit()
 
     return {"deleted": id}
+
+
+
+# Assume validate_key is defined elsewhere in your file
+# from auth import validate_key
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def validate_key(
+    api_key: str = Depends(api_key_header),
+    db: Session = Depends(get_db) # Inject the DB session here
+):
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key is missing") # Note: FastAPI detail usually takes a string
+
+    # Query the guest using SQLAlchemy ORM
+    guest = db.query(Guest).filter(Guest.api_key == api_key).first()
+
+    if not guest:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    return guest
+# ---------------------------------------------------
+# Pydantic Schemas
+# ---------------------------------------------------
+class BookingCreate(BaseModel):
+    room_id: int
+    guest_id: int
+    datefrom: date
+    dateto: date
+    addinfo: str | None = None
+
+class Stars(BaseModel):
+    stars: int
+
+# ---------------------------------------------------
+# Endpoints
+# ---------------------------------------------------
+
+@app.get("/bookings")
+def get_bookings(guest: Guest = Depends(validate_key), db: Session = Depends(get_db)):
+    bookings = db.query(BookingView).filter(
+        BookingView.guest_id == guest.id
+    ).order_by(BookingView.datefrom.asc()).all()
+
+    return bookings
+
+
+@app.post("/bookings")
+def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
+    new_booking = Booking(
+        room_id=booking.room_id,
+        guest_id=booking.guest_id,
+        datefrom=booking.datefrom,
+        dateto=booking.dateto,
+        addinfo=booking.addinfo
+    )
+
+    db.add(new_booking)
+    db.commit()
+    db.refresh(new_booking)
+
+    return {"message": "Booking created!", "booking_id": new_booking.id}
+
+
+@app.put("/bookings/{id}")
+def put_bookings(id: int, stars: Stars, guest: Guest = Depends(validate_key), db: Session = Depends(get_db)):
+    booking = db.query(Booking).filter(
+        Booking.id == id,
+        Booking.guest_id == guest.id
+    ).first()
+
+    if not booking:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Booking {id} not found or you don't have permission to update this booking."
+        )
+
+    booking.stars = stars.stars
+    db.commit()
+    db.refresh(booking)
+
+    return booking
+
+
+@app.get("/guests")
+def get_guests(db: Session = Depends(get_db)):
+    # Create the subquery for 'previous_visits'
+    visits_subquery = (
+        db.query(func.count(Booking.id))
+        .filter(Booking.guest_id == Guest.id)
+        .filter(Booking.dateto < func.current_date())
+        .scalar_subquery()
+    )
+
+    # Query Guests and attach the subquery as a column
+    results = db.query(
+        Guest.id,
+        Guest.firstname,
+        Guest.lastname,
+        visits_subquery.label("previous_visits")
+    ).all()
+
+    # Format the results into a list of dictionaries
+    guests = [
+        {
+            "id": row.id,
+            "firstname": row.firstname,
+            "lastname": row.lastname,
+            "previous_visits": row.previous_visits
+        }
+        for row in results
+    ]
+
+    return {"guests": guests}
+
+
+@app.get("/guests/{id}")
+def get_guests_id(id: int, db: Session = Depends(get_db)):
+    # Count the previous visits directly
+    visit_count = db.query(func.count(Booking.id)).filter(
+        Booking.guest_id == id,
+        Booking.dateto < func.current_date()
+    ).scalar()
+
+    return {"count": visit_count}
